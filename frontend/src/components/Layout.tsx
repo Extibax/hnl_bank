@@ -74,7 +74,7 @@ export function Layout() {
         </div>
       )}
 
-      <div className="flex">
+      <div className="flex min-h-0">
         {/* Desktop sidebar */}
         <aside className="hidden w-64 shrink-0 flex-col border-r bg-card lg:flex">
           <div className="flex items-center gap-2 px-4 py-4 font-semibold">
@@ -91,7 +91,7 @@ export function Layout() {
           </div>
         </aside>
 
-        <main className="flex-1 p-4 md:p-6">
+        <main className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
           {/* Mobile user + logout */}
           <div className="mb-4 flex items-center justify-between lg:hidden">
             <span className="truncate text-sm text-muted-foreground">{displayName}</span>

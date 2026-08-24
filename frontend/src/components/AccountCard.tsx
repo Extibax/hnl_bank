@@ -10,7 +10,7 @@ export function AccountCard({ account }: { account: Account }) {
         <CardTitle className="text-sm font-medium capitalize">
           {account.account_type}
         </CardTitle>
-        <Badge variant="secondary">{account.account_type}</Badge>
+        <Badge variant="secondary">{account.currency || "USD"}</Badge>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">

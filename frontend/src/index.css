@@ -81,3 +81,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Base / viewport guards */
+html,
+body {
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+#root {
+  min-height: 100dvh;
+}

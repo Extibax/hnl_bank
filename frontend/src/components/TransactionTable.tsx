@@ -22,10 +22,10 @@ export function TransactionTable({ transactions, emptyText = "Sin transacciones"
         <TableRow>
           <TableHead>Fecha</TableHead>
           <TableHead>Tipo</TableHead>
-          <TableHead>De</TableHead>
-          <TableHead>Para</TableHead>
+          <TableHead className="hidden md:table-cell">De</TableHead>
+          <TableHead className="hidden md:table-cell">Para</TableHead>
           <TableHead className="text-right">Monto</TableHead>
-          <TableHead>Descripción</TableHead>
+          <TableHead className="hidden lg:table-cell">Descripción</TableHead>
           <TableHead>Estado</TableHead>
         </TableRow>
       </TableHeader>
@@ -45,13 +45,13 @@ export function TransactionTable({ transactions, emptyText = "Sin transacciones"
                 <TableCell>
                   <Badge variant="outline">{typeLabel(t.type)}</Badge>
                 </TableCell>
-                <TableCell>{t.from_account || "—"}</TableCell>
-                <TableCell>{t.to_account || "—"}</TableCell>
+                <TableCell className="hidden md:table-cell">{t.from_account || "—"}</TableCell>
+                <TableCell className="hidden md:table-cell">{t.to_account || "—"}</TableCell>
                 <TableCell className={`text-right font-medium ${className}`}>
                   {sign}
                   {formatMoney(t.amount)}
                 </TableCell>
-                <TableCell>{t.description || "—"}</TableCell>
+                <TableCell className="hidden lg:table-cell">{t.description || "—"}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">{t.status || "completed"}</Badge>
                 </TableCell>
