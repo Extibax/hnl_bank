@@ -49,8 +49,9 @@ services:
       DATABASE_URL: postgres://hnlbank:hnlbank@postgres:5432/hnlbank?sslmode=disable
       TIGERBEETLE_ADDRESS: "172.28.0.10:3000"
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-deepseek/deepseek-chat-v3-0324}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://opencode.ai/zen/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-nemotron-3-ultra-free}
     depends_on:
       postgres:
         condition: service_healthy

@@ -36,7 +36,7 @@ func main() {
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 	acctSvc := service.NewAccountService(acctRepo)
 	txSvc := service.NewTransactionService(acctRepo, txRepo)
-	chatSvc := service.NewChatService(cfg.OpenRouterAPIKey, cfg.OpenRouterModel, acctSvc, txSvc)
+	chatSvc := service.NewChatService(cfg.AIAPIKey, cfg.AIModel, cfg.AIBaseURL, acctSvc, txSvc)
 
 	ctx := context.Background()
 	if err := tb.EnsureExternalAccount(ctx); err != nil {

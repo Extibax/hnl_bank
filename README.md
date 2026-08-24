@@ -10,7 +10,7 @@
 | Base de datos relacional | PostgreSQL 16 (users, user_accounts, transactions) |
 | Libro mayor financiero | TigerBeetle (cuentas y transferencias, saldos autoritativos) |
 | Auth | JWT (HS256) + bcrypt para passwords |
-| Chat IA | OpenRouter + DeepSeek, tool-use directo (sin MCP server formal) |
+| Chat IA | OpenCode (OpenAI-compatible) + DeepSeek, tool-use directo (sin MCP server formal) |
 | Frontend | Vite + React + TypeScript + Tailwind + shadcn/ui + react-router-dom + axios + sonner |
 | Infraestructura | Docker Compose (4 servicios) |
 | Tests | `go test` en la capa de servicio con repositorios mockeados |
@@ -58,8 +58,9 @@ Visita http://localhost:5180. El backend queda en http://localhost:8080. (El pue
 | `DATABASE_URL` | DSN de PostgreSQL | `postgres://hnlbank:hnlbank@postgres:5432/hnlbank?sslmode=disable` |
 | `TIGERBEETLE_ADDRESS` | Direccion del cluster TigerBeetle | `3000` |
 | `JWT_SECRET` | Secreto para firmar tokens JWT | `dev-secret-change-me` |
-| `OPENROUTER_API_KEY` | API key de OpenRouter para el chat IA (vacio = chat deshabilitado) | `(vacio)` |
-| `OPENROUTER_MODEL` | Modelo de chat a usar | `deepseek/deepseek-chat-v3-0324` |
+| `OPENAI_BASE_URL` | Base URL OpenAI-compatible para el chat IA | `https://opencode.ai/zen/v1` |
+| `OPENAI_API_KEY` | API key de OpenCode para el chat IA (vacio = chat deshabilitado) | `(vacio)` |
+| `OPENAI_MODEL` | Modelo de chat a usar (debe soportar tool-use) | `nemotron-3-ultra-free` |
 | `PORT` | Puerto del backend | `8080` |
 
 ## Credenciales de prueba

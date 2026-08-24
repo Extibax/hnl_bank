@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -12,7 +13,7 @@ import (
 )
 
 // ErrChatNotConfigured indicates the AI chat is unavailable (missing API key).
-var ErrChatNotConfigured = errors.New("AI chat no configurado: falta OPENROUTER_API_KEY")
+var ErrChatNotConfigured = errors.New("AI chat no configurado: falta OPENAI_API_KEY")
 
 // ChatMessage is a single exchange in the conversation history.
 type ChatMessage struct {
@@ -42,6 +43,7 @@ type ChatService interface {
 type chatService struct {
 	apiKey       string
 	model        string
+	baseURL      string
 	accounts     AccountService
 	transactions TransactionService
 	http         *http.Client
@@ -49,10 +51,11 @@ type chatService struct {
 
 // NewChatService builds a ChatService. If apiKey is empty, the service returns
 // ErrChatNotConfigured on every call.
-func NewChatService(apiKey, model string, accounts AccountService, transactions TransactionService) ChatService {
+func NewChatService(apiKey, model, baseURL string, accounts AccountService, transactions TransactionService) ChatService {
 	return &chatService{
 		apiKey:       apiKey,
 		model:        model,
+		baseURL:      baseURL,
 		accounts:     accounts,
 		transactions: transactions,
 		http:         &http.Client{Timeout: 90 * time.Second},
@@ -79,7 +82,7 @@ func (s *chatService) Chat(ctx context.Context, userID string, req *ChatRequest)
 	}
 	messages := s.buildMessages(req.Message, req.History)
 	for i := 0; i < 5; i++ {
-		msg, err := s.callOpenRouter(ctx, messages)
+		msg, err := s.callOpenRouterRetry(ctx, messages)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +99,14 @@ func (s *chatService) Chat(ctx context.Context, userID string, req *ChatRequest)
 				}, nil
 			}
 		}
-		assistant := map[string]any{"role": "assistant", "content": msg.Content, "tool_calls": msg.RawToolCalls}
+		rawToolCalls := make([]map[string]any, 0, len(toolCalls))
+		for _, tc := range toolCalls {
+			rawToolCalls = append(rawToolCalls, map[string]any{
+				"id": tc.ID, "type": "function",
+				"function": map[string]any{"name": tc.Name, "arguments": tc.ArgsRaw},
+			})
+		}
+		assistant := map[string]any{"role": "assistant", "tool_calls": rawToolCalls}
 		messages = append(messages, assistant)
 		for _, tc := range toolCalls {
 			res := s.execute(ctx, userID, tc.Name, tc.Args)
@@ -107,9 +117,10 @@ func (s *chatService) Chat(ctx context.Context, userID string, req *ChatRequest)
 }
 
 type toolCall struct {
-	Name string
-	Args map[string]any
-	ID   string
+	Name    string
+	Args    map[string]any
+	ArgsRaw string
+	ID      string
 }
 
 type openAIToolCall struct {
@@ -132,7 +143,7 @@ func (m *openAIMessage) toToolCalls() []toolCall {
 	for _, tc := range m.ToolCalls {
 		var args map[string]any
 		_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
-		out = append(out, toolCall{Name: tc.Function.Name, Args: args, ID: tc.ID})
+		out = append(out, toolCall{Name: tc.Function.Name, Args: args, ArgsRaw: tc.Function.Arguments, ID: tc.ID})
 	}
 	return out
 }
@@ -145,7 +156,8 @@ type openAIResponse struct {
 
 func (s *chatService) callOpenRouter(ctx context.Context, messages []map[string]any) (*openAIMessage, error) {
 	body, _ := json.Marshal(map[string]any{"model": s.model, "messages": messages, "tools": allTools})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(body))
+	endpoint := strings.TrimRight(s.baseURL, "/") + "/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -157,8 +169,20 @@ func (s *chatService) callOpenRouter(ctx context.Context, messages []map[string]
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
+	if len(data) == 0 {
+		return nil, errors.New("ai provider returned an empty response")
+	}
+	var probe struct {
+		Error *struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &probe) == nil && probe.Error != nil {
+		return nil, fmt.Errorf("ai provider error (%s): %s", probe.Error.Type, probe.Error.Message)
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("openrouter error: " + strings.TrimSpace(string(data)))
+		return nil, errors.New("ai provider error: " + strings.TrimSpace(string(data)))
 	}
 	var parsed openAIResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
@@ -168,6 +192,26 @@ func (s *chatService) callOpenRouter(ctx context.Context, messages []map[string]
 		return &openAIMessage{}, nil
 	}
 	return &parsed.Choices[0].Message, nil
+}
+
+// callOpenRouterRetry invokes callOpenRouter, retrying transient provider errors.
+func (s *chatService) callOpenRouterRetry(ctx context.Context, messages []map[string]any) (*openAIMessage, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 700 * time.Millisecond):
+			}
+		}
+		msg, err := s.callOpenRouter(ctx, messages)
+		if err == nil {
+			return msg, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func (s *chatService) buildMessages(message string, history []ChatMessage) []map[string]any {
