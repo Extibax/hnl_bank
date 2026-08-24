@@ -46,12 +46,23 @@ Las operaciones de dinero (deposito, retiro, transferencia) se registran como tr
 
 ## Ejecucion
 
+El seed y la inicializacion son **automaticos**: al arrancar, el backend crea el esquema PostgreSQL, el contenedor de TigerBeetle formatea e inicia el cluster, y si la tabla `users` esta vacia el backend siembra 1000 usuarios, 1605 cuentas y 6429 transacciones (desde un JSON embebido con `go:embed`). Si ya hay datos, no vuelve a sembrar.
+
+> **IMPORTANTE (por Docker Desktop en WSL2):** el data de TigerBeetle es *efimero* (vive dentro del contenedor, no en un volumen). Por eso, para un arranque limpio y reproducible **SIEMPRE usa `-v`**. Si solo hicieras `docker compose up` (sin `-v`) una segunda vez, PostgreSQL conserva los usuarios (el seed se salta) pero TigerBeetle queda vacio y las cuentas fallarian.
+
+### Pasos manuales para probar
+
 ```bash
+git clone https://github.com/Extibax/hnl_bank
+cd hnl_bank
 cp .env.example .env
-docker-compose up --build
+docker compose down -v && docker compose up --build
 ```
 
-Visita http://localhost:5180. El backend queda en http://localhost:8080. (El puerto 5173 estaba ocupado por otro proyecto en este equipo, por lo que el frontend se sirve en el 5180; en un entorno libre basta con cambiar el mapeo `ports` de la seccion `frontend` de `docker-compose.yml`.) En el primer arranque el backend crea el esquema y siembra 1000 usuarios, 1605 cuentas y 6429 transacciones desde los datos de prueba embebidos. Un segundo arranque no vuelve a sembrar.
+1. Abrir http://localhost:5180 (frontend). El backend queda en http://localhost:8080.
+2. Login con `ihernandez@email.com` / `Isabel2024!` (o los de la tabla de credenciales).
+
+(El puerto 5173 estaba ocupado por otro proyecto en este equipo, por lo que el frontend se sirve en el 5180; en un entorno libre basta con cambiar el mapeo `ports` de la seccion `frontend` de `docker-compose.yml`.)
 
 ## Variables de entorno
 
