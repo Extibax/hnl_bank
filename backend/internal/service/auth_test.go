@@ -12,6 +12,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// mockDefaults returns an account repo whose FindByNumber reports the number is free,
+// so a registration can allocate a new account number.
+func mockAccounts() *mockAccountRepo {
+	return &mockAccountRepo{findByNumFn: func(ctx context.Context, number string) (*model.Account, error) {
+		return nil, repository.ErrAccountNotFound
+	}}
+}
+
 func hashPassword(t *testing.T, pass string) string {
 	t.Helper()
 	h, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.MinCost)
@@ -25,7 +33,7 @@ func TestRegisterDuplicateEmail(t *testing.T) {
 	repo := &mockUserRepo{createFn: func(ctx context.Context, u *model.User) error {
 		return repository.ErrEmailExists
 	}}
-	svc := service.NewAuthService(repo, "secret")
+	svc := service.NewAuthService(repo, mockAccounts(), "secret")
 	_, err := svc.Register(context.Background(), "a@b.com", "pass", "Name")
 	if !errors.Is(err, service.ErrEmailExists) {
 		t.Fatalf("expected ErrEmailExists, got %v", err)
@@ -38,7 +46,7 @@ func TestRegisterCreatesHashedPassword(t *testing.T) {
 		stored = *u
 		return nil
 	}}
-	svc := service.NewAuthService(repo, "secret")
+	svc := service.NewAuthService(repo, mockAccounts(), "secret")
 	u, err := svc.Register(context.Background(), "a@b.com", "pass123", "Alberto")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -65,7 +73,7 @@ func TestLoginWrongPassword(t *testing.T) {
 			UpdatedAt:    time.Now(),
 		}, nil
 	}}
-	svc := service.NewAuthService(repo, "secret")
+	svc := service.NewAuthService(repo, mockAccounts(), "secret")
 	_, _, err := svc.Login(context.Background(), "a@b.com", "wrong")
 	if !errors.Is(err, service.ErrInvalidCredentials) {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
@@ -76,7 +84,7 @@ func TestLoginSuccessReturnsValidToken(t *testing.T) {
 	repo := &mockUserRepo{findByEmail: func(ctx context.Context, email string) (*model.User, error) {
 		return &model.User{ID: "u1", Email: email, PasswordHash: hashPassword(t, "secretpass")}, nil
 	}}
-	svc := service.NewAuthService(repo, "secret")
+	svc := service.NewAuthService(repo, mockAccounts(), "secret")
 	u, token, err := svc.Login(context.Background(), "a@b.com", "secretpass")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -100,7 +108,7 @@ func TestLogoutBlacklistsToken(t *testing.T) {
 	repo := &mockUserRepo{findByEmail: func(ctx context.Context, email string) (*model.User, error) {
 		return &model.User{ID: "u1", Email: email, PasswordHash: hashPassword(t, "secretpass")}, nil
 	}}
-	svc := service.NewAuthService(repo, "secret")
+	svc := service.NewAuthService(repo, mockAccounts(), "secret")
 	_, token, err := svc.Login(context.Background(), "a@b.com", "secretpass")
 	if err != nil {
 		t.Fatalf("login: %v", err)

@@ -33,7 +33,7 @@ func main() {
 	acctRepo := repository.NewAccountRepository(db, tb)
 	txRepo := repository.NewTransactionRepository(db, tb)
 
-	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
+	authSvc := service.NewAuthService(userRepo, acctRepo, cfg.JWTSecret)
 	acctSvc := service.NewAccountService(acctRepo)
 	txSvc := service.NewTransactionService(acctRepo, txRepo)
 	chatSvc := service.NewChatService(cfg.AIAPIKey, cfg.AIModel, cfg.AIBaseURL, acctSvc, txSvc)

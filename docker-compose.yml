@@ -23,9 +23,11 @@ services:
     # (ephemeral). We format on first boot then start. A static IP is used because
     # the client only accepts IP:port addresses (not hostnames).
     entrypoint: ["sh", "-c"]
-    command: ["/tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data 2>/dev/null || true; exec /tigerbeetle start --addresses=0.0.0.0:3000 /data"]
+    command: ["sh /scripts/tb-init.sh"]
     security_opt:
       - seccomp=unconfined
+    volumes:
+      - ./scripts/tb-init.sh:/scripts/tb-init.sh:ro
     networks:
       app:
         ipv4_address: 172.28.0.10

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/juanbedoya/hnl-bank/backend/internal/mcp"
 	"io"
 	"net/http"
 	"strings"
@@ -46,29 +48,40 @@ type chatService struct {
 	baseURL      string
 	accounts     AccountService
 	transactions TransactionService
+	mcp          *mcp.Server
+	tools        []map[string]any
 	http         *http.Client
 }
 
 // NewChatService builds a ChatService. If apiKey is empty, the service returns
 // ErrChatNotConfigured on every call.
 func NewChatService(apiKey, model, baseURL string, accounts AccountService, transactions TransactionService) ChatService {
+	mcpSrv := mcp.NewServer(accounts, transactions)
 	return &chatService{
 		apiKey:       apiKey,
 		model:        model,
 		baseURL:      baseURL,
 		accounts:     accounts,
 		transactions: transactions,
+		mcp:          mcpSrv,
+		tools:        openAITools(mcpSrv.Tools()),
 		http:         &http.Client{Timeout: 90 * time.Second},
 	}
 }
 
-var allTools = []map[string]any{
-	{"type":"function","function":map[string]any{"name":"list_accounts","description":"Lista las cuentas del usuario con saldos.","parameters":map[string]any{"type":"object","properties":map[string]any{},"required":[]string{}}}},
-	{"type":"function","function":map[string]any{"name":"get_balance","description":"Devuelve el saldo de una cuenta.","parameters":map[string]any{"type":"object","properties":map[string]any{"account_id":map[string]any{"type":"string"}},"required":[]string{"account_id"}}}},
-	{"type":"function","function":map[string]any{"name":"get_transactions","description":"Historial de transacciones de una cuenta.","parameters":map[string]any{"type":"object","properties":map[string]any{"account_id":map[string]any{"type":"string"},"limit":map[string]any{"type":"integer"},"offset":map[string]any{"type":"integer"}},"required":[]string{}}}},
-	{"type":"function","function":map[string]any{"name":"make_deposit","description":"Deposita dinero en una cuenta. Accion critica.","parameters":map[string]any{"type":"object","properties":map[string]any{"account_id":map[string]any{"type":"string"},"amount":map[string]any{"type":"string","description":"monto en USD"}},"required":[]string{"account_id","amount"}}}},
-	{"type":"function","function":map[string]any{"name":"make_withdrawal","description":"Retira dinero de una cuenta. Accion critica.","parameters":map[string]any{"type":"object","properties":map[string]any{"account_id":map[string]any{"type":"string"},"amount":map[string]any{"type":"string"}},"required":[]string{"account_id","amount"}}}},
-	{"type":"function","function":map[string]any{"name":"make_transfer","description":"Transfiere dinero entre cuentas. Accion critica.","parameters":map[string]any{"type":"object","properties":map[string]any{"from_account":map[string]any{"type":"string"},"to_account":map[string]any{"type":"string"},"amount":map[string]any{"type":"string"}},"required":[]string{"from_account","to_account","amount"}}}},
+func openAITools(tools []mcp.Tool) []map[string]any {
+	out := make([]map[string]any, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        t.Name,
+				"description": t.Description,
+				"parameters":  t.InputSchema,
+			},
+		})
+	}
+	return out
 }
 
 var criticalTools = map[string]bool{"make_deposit": true, "make_withdrawal": true, "make_transfer": true}
@@ -155,7 +168,7 @@ type openAIResponse struct {
 }
 
 func (s *chatService) callOpenRouter(ctx context.Context, messages []map[string]any) (*openAIMessage, error) {
-	body, _ := json.Marshal(map[string]any{"model": s.model, "messages": messages, "tools": allTools})
+	body, _ := json.Marshal(map[string]any{"model": s.model, "messages": messages, "tools": s.tools})
 	endpoint := strings.TrimRight(s.baseURL, "/") + "/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -246,84 +259,24 @@ func confirmationMessage(tool string, args map[string]any) string {
 }
 
 func (s *chatService) execute(ctx context.Context, userID, name string, args map[string]any) string {
-	switch name {
-	case "list_accounts":
-		accs, err := s.accounts.GetAccounts(ctx, userID)
-		if err != nil {
-			return `{"error": "` + err.Error() + `"}`
-		}
-		type row struct {
-			AccountNumber string `json:"account_number"`
-			Type          string `json:"account_type"`
-			Balance       string `json:"balance"`
-		}
-		var rows []row
-		for _, a := range accs {
-			rows = append(rows, row{AccountNumber: a.AccountNumber, Type: a.AccountType, Balance: moneyFromCents(a.Balance)})
-		}
-		b, _ := json.Marshal(rows)
-		return string(b)
-	case "get_balance":
-		acc, _ := args["account_id"].(string)
-		if acc == "" {
-			return `{"error": "missing account_id"}`
-		}
-		balance, currency, err := s.accounts.GetBalance(ctx, userID, acc)
-		if err != nil {
-			return `{"error": "` + err.Error() + `"}`
-		}
-		return `{"balance": "` + moneyFromCents(balance) + `", "currency": "` + currency + `"}`
-	case "get_transactions":
-		acc, _ := args["account_id"].(string)
-		limit := 20
-		if v, ok := args["limit"].(float64); ok && v > 0 {
-			limit = int(v)
-		}
-		txs, _, err := s.transactions.History(ctx, userID, acc, limit, 0)
-		if err != nil {
-			return `{"error": "` + err.Error() + `"}`
-		}
-		b, _ := json.Marshal(txs)
-		return string(b)
-	default:
-		return `{"error": "unknown tool"}`
+	res, err := s.mcp.CallTool(ctx, userID, name, args)
+	if err != nil {
+		return `{"error": "` + err.Error() + `"}`
 	}
+	return res
 }
 
 func (s *chatService) executeAction(ctx context.Context, userID string, action map[string]any) (*ChatResult, error) {
 	tool, _ := action["tool"].(string)
-	args, _ := action["args"].(map[string]any)
 	if tool == "" {
 		return &ChatResult{Message: "Acción no reconocida."}, nil
 	}
+	args, _ := action["args"].(map[string]any)
 	if args == nil {
 		args = map[string]any{}
 	}
-	amountStr, _ := args["amount"].(string)
-	amount, err := moneyToCents(amountStr)
-	if err != nil {
-		return &ChatResult{Message: "Monto inválido."}, nil
+	if _, err := s.mcp.CallTool(ctx, userID, tool, args); err != nil {
+		return &ChatResult{Message: "Error: " + err.Error()}, nil
 	}
-	switch tool {
-	case "make_deposit":
-		acct, _ := args["account_id"].(string)
-		if err := s.transactions.Deposit(ctx, userID, acct, amount); err != nil {
-			return &ChatResult{Message: "Error: " + err.Error()}, nil
-		}
-		return &ChatResult{Message: "Depósito realizado correctamente."}, nil
-	case "make_withdrawal":
-		acct, _ := args["account_id"].(string)
-		if err := s.transactions.Withdraw(ctx, userID, acct, amount); err != nil {
-			return &ChatResult{Message: "Error: " + err.Error()}, nil
-		}
-		return &ChatResult{Message: "Retiro realizado correctamente."}, nil
-	case "make_transfer":
-		from, _ := args["from_account"].(string)
-		to, _ := args["to_account"].(string)
-		if err := s.transactions.Transfer(ctx, userID, from, to, amount); err != nil {
-			return &ChatResult{Message: "Error: " + err.Error()}, nil
-		}
-		return &ChatResult{Message: "Transferencia realizada correctamente."}, nil
-	}
-	return &ChatResult{Message: "Acción no reconocida."}, nil
+	return &ChatResult{Message: "Operación realizada correctamente."}, nil
 }

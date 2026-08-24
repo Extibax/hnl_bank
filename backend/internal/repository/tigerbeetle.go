@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"time"
@@ -46,6 +47,18 @@ func NewTigerBeetleRepository(client tb.Client) TigerBeetleRepository {
 
 // ExternalID is the id of the dedicated external counterparty account.
 var ExternalID = func() [16]byte { return tb.ToUint128(1 << 40).Bytes() }()
+
+// NewAccountID returns a random, non-zero 16-byte TigerBeetle account id.
+func NewAccountID() [16]byte {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic(err)
+	}
+	if b == [16]byte{} {
+		b[0] = 1
+	}
+	return b
+}
 
 // Uint128FromUint64 builds a 16-byte id from a sequential counter.
 func Uint128FromUint64(n uint64) [16]byte {

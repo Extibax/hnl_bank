@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -36,15 +38,17 @@ type AuthService interface {
 
 type authService struct {
 	users     repository.UserRepository
+	accounts  repository.AccountRepository
 	jwtSecret []byte
 	blacklist map[string]time.Time
 	mu        sync.RWMutex
 }
 
 // NewAuthService builds an AuthService.
-func NewAuthService(users repository.UserRepository, jwtSecret string) AuthService {
+func NewAuthService(users repository.UserRepository, accounts repository.AccountRepository, jwtSecret string) AuthService {
 	return &authService{
 		users:     users,
+		accounts:  accounts,
 		jwtSecret: []byte(jwtSecret),
 		blacklist: make(map[string]time.Time),
 	}
@@ -68,6 +72,9 @@ func (s *authService) Register(ctx context.Context, email, password, fullName st
 		if errors.Is(err, repository.ErrEmailExists) {
 			return nil, ErrEmailExists
 		}
+		return nil, err
+	}
+	if err := s.createDefaultAccount(ctx, u.ID); err != nil {
 		return nil, err
 	}
 	return u, nil
@@ -118,6 +125,45 @@ func (s *authService) ValidateToken(ctx context.Context, token string) (string, 
 		return "", ErrInvalidToken
 	}
 	return claims.Subject, nil
+}
+
+// createDefaultAccount opens a savings account for a newly registered user.
+func (s *authService) createDefaultAccount(ctx context.Context, userID string) error {
+	number, err := s.uniqueAccountNumber(ctx)
+	if err != nil {
+		return err
+	}
+	acct := &model.Account{
+		ID:            id.New(),
+		UserID:        userID,
+		AccountNumber: number,
+		TigerBeetleID: repository.NewAccountID(),
+		AccountType:   "savings",
+		Currency:      "USD",
+		CreatedAt:     time.Now().UTC(),
+	}
+	return s.accounts.Create(ctx, acct)
+}
+
+// uniqueAccountNumber generates a free account number in the seed format.
+func (s *authService) uniqueAccountNumber(ctx context.Context) (string, error) {
+	for i := 0; i < 16; i++ {
+		candidate := randomAccountNumber()
+		if _, err := s.accounts.FindByNumber(ctx, candidate); err != nil {
+			if errors.Is(err, repository.ErrAccountNotFound) {
+				return candidate, nil
+			}
+			return "", err
+		}
+	}
+	return "", errors.New("could not allocate an account number")
+}
+
+func randomAccountNumber() string {
+	var b [12]byte
+	_, _ = rand.Read(b[:])
+	grp := func(x, y byte) int { return (int(x)<<8 | int(y)) % 10000 }
+	return fmt.Sprintf("4001-%04d-%04d-%04d", grp(b[0], b[1]), grp(b[2], b[3]), grp(b[4], b[5]))
 }
 
 func (s *authService) signToken(userID string) (string, error) {

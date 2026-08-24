@@ -10,7 +10,7 @@
 | Base de datos relacional | PostgreSQL 16 (users, user_accounts, transactions) |
 | Libro mayor financiero | TigerBeetle (cuentas y transferencias, saldos autoritativos) |
 | Auth | JWT (HS256) + bcrypt para passwords |
-| Chat IA | OpenCode (OpenAI-compatible) + DeepSeek, tool-use directo (sin MCP server formal) |
+| Chat IA | OpenCode (OpenAI-compatible) + DeepSeek, tool-use via un **servidor MCP** (Model Context Protocol) |
 | Frontend | Vite + React + TypeScript + Tailwind + shadcn/ui + react-router-dom + axios + sonner |
 | Infraestructura | Docker Compose (4 servicios) |
 | Tests | `go test` en la capa de servicio con repositorios mockeados |
@@ -93,7 +93,7 @@ Los montos viajan como cadenas decimales (`"1234.56"`). Internamente se almacena
 ## Decisiones arquitectonicas
 
 - **Por que TigerBeetle para finanzas:** es un libro mayor de doble entrada, inmutable y de alto rendimiento, disenado para balances y transferencias; garantiza atomicidad y evita errores de concurrencia en el dinero.
-- **Por que tool-use directo en vez de MCP server formal:** para el alcance de un MVP, exponer las herramientas de negocio directamente al modelo via OpenRouter reduce infraestructura y latencia; el flujo de confirmacion cubre el riesgo de acciones criticas.
+- **Por que MCP:** las operaciones bancarias de la IA se exponen como un servidor **Model Context Protocol** (JSON-RPC 2.0, en `internal/mcp/`) con las tools list_accounts, get_balance, get_transactions, make_deposit, make_withdrawal, make_transfer. El chat las ejecuta a traves de ese servidor; tambien corre standalone sobre stdio (`cmd/mcp-server`).
 - **Por que Chi:** router ligero, compatible con `net/http` y con agrupacion de rutas + middlewares (JWT), ideal para una API pequeña y tipada.
 - **Enteros en centavos:** evitar errores de punto flotante en dinero; la conversion a decimal ocurre solo en los limites de la API.
 
@@ -148,3 +148,17 @@ docker run --rm -v "$PWD/backend:/src" -v "$HOME/go/pkg/mod:/go/pkg/mod" -w /src
 - **TigerBeetle**: requiere io_uring, que el perfil seccomp por defecto de Docker bloquea; por eso el servicio usa security_opt seccomp=unconfined. Ademas, en Docker Desktop sobre WSL2 los volumenes montados no soportan el backend de almacenamiento de TigerBeetle (O_DIRECT), por lo que el directorio de datos queda dentro del contenedor (efimero). El arranque formatea el cluster con format y luego ejecuta start. Por ello, para una demo reproducible se recomienda `docker compose down -v && docker compose up --build`.
 - **Seed**: los datos de prueba contienen emails duplicados; el seeder les agrega un sufijo (ej. email+2@dominio) para preservar la restriccion de unicidad e insertar los 1000 usuarios.
 - **Chat IA**: sin OPENROUTER_API_KEY el endpoint /api/chat responde 503; el flujo completo de tool-use requiere esa clave.
+## Integracion MCP (Model Context Protocol)
+
+El asistente de IA accede a las operaciones bancarias a traves de un servidor MCP:
+
+- `backend/internal/mcp/server.go` — servidor MCP con las 6 tools (saldos, historial, deposito, retiro, transferencia).
+- `backend/internal/mcp/jsonrpc.go` — manejador JSON-RPC 2.0 (initialize, tools/list, tools/call).
+- `backend/cmd/mcp-server/main.go` — servidor MCP standalone sobre stdio.
+
+El `user_id` autenticado se pasa en `arguments` de cada `tools/call`.
+
+## Scripts de base de datos / inicializacion
+
+- `db/schema.sql` — DDL de las tablas PostgreSQL (entregable; el backend tambien lo crea via migracion embebida).
+- `scripts/tb-init.sh` — inicializacion y arranque de TigerBeetle (formatea el cluster y ejecuta start); el servicio `tigerbeetle` del compose lo usa.
