@@ -57,7 +57,7 @@ export function Layout() {
   return (
     <div className="min-h-screen bg-background">
       {/* Mobile top bar */}
-      <header className="flex items-center justify-between border-b px-4 py-3 lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-background px-4 py-3 lg:hidden">
         <Link to="/dashboard" className="flex items-center gap-2 font-semibold">
           <Landmark className="h-5 w-5" />
           HNL Bank
@@ -76,7 +76,7 @@ export function Layout() {
 
       <div className="flex min-h-0">
         {/* Desktop sidebar */}
-        <aside className="hidden w-64 shrink-0 flex-col border-r bg-card lg:flex">
+        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-card lg:flex">
           <div className="flex items-center gap-2 px-4 py-4 font-semibold">
             <Landmark className="h-5 w-5" />
             HNL Bank
