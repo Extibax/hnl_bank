@@ -3,6 +3,7 @@ import { client, getApiErrorMessage } from "@/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { AccountCard } from "@/components/AccountCard";
 import { TransactionTable } from "@/components/TransactionTable";
+import { MovementsChart } from "@/components/MovementsChart";
 import { ChatPanel } from "@/components/ChatPanel";
 import {
   Card,
@@ -114,6 +115,15 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Movimientos por tipo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MovementsChart transactions={transactions} />
+        </CardContent>
+      </Card>
 
       <ChatPanel onActionComplete={loadData} />
     </div>
