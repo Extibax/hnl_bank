@@ -63,6 +63,9 @@ Visita http://localhost:5180. El backend queda en http://localhost:8080. (El pue
 | `OPENAI_BASE_URL` | Base URL OpenAI-compatible para el chat IA | `https://opencode.ai/zen/v1` |
 | `OPENAI_API_KEY` | API key de OpenCode para el chat IA (vacio = chat deshabilitado) | `(vacio)` |
 | `OPENAI_MODEL` | Modelo de chat a usar (debe soportar tool-use) | `nemotron-3-ultra-free` |
+| `LOG_LEVEL` | Nivel de log (debug/info/warn/error) | `info` |
+| `RATE_LIMIT_REQUESTS` | Requests permitidos por ventana por IP | `120` |
+| `RATE_LIMIT_WINDOW_SECONDS` | Ventana de rate limiting (segundos) | `60` |
 | `PORT` | Puerto del backend | `8080` |
 
 ## Credenciales de prueba
@@ -87,6 +90,7 @@ Visita http://localhost:5180. El backend queda en http://localhost:8080. (El pue
 | POST | `/api/transactions/withdraw` | Retiro | Si |
 | POST | `/api/transactions/transfer` | Transferencia | Si |
 | GET | `/api/transactions/{account_id}?limit&offset` | Historial de una cuenta | Si |
+| GET | `/api/transactions/export` | Exportar historial a CSV | Si |
 | POST | `/api/chat` | Chat con IA (tool-use) | Si |
 | POST | `/api/chat/action` | Ejecutar accion critica confirmada | Si |
 
@@ -164,3 +168,13 @@ El `user_id` autenticado se pasa en `arguments` de cada `tools/call`.
 
 - `db/schema.sql` — DDL de las tablas PostgreSQL (entregable; el backend tambien lo crea via migracion embebida).
 - `scripts/tb-init.sh` — inicializacion y arranque de TigerBeetle (formatea el cluster y ejecuta start); el servicio `tigerbeetle` del compose lo usa.
+
+## Bonus implementados
+
+- **Testing**: tests unitarios de la capa de servicio (auth/account/transaction) con repositorios mockeados.
+- **Paginacion**: historial con `limit`/\`offset\` y campo `total`.
+- **Logs estructurados**: cada request se registra en JSON (log/slog).
+- **Export historial a CSV**: `GET /api/transactions/export`.
+- **Rate limiting**: limite por IP en endpoints sensibles (responde 429 con Retry-After).
+- **CI/CD**: GitHub Actions (build+test de backend, build de frontend).
+- **Graficas**: chart de movimientos por tipo en el dashboard (recharts).
