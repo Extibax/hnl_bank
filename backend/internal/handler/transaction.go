@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -114,4 +115,40 @@ func (h *TransactionHandler) History(w http.ResponseWriter, r *http.Request) {
 		txs[i].AmountStr = money.FromCents(txs[i].Amount)
 	}
 	response.JSON(w, http.StatusOK, map[string]any{"transactions": txs, "total": total})
+}
+
+// Export streams the user's transaction history as CSV.
+func (h *TransactionHandler) Export(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserID(r.Context())
+	accountID := r.URL.Query().Get("account_id")
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"transacciones.csv\"")
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"fecha", "tipo", "de", "para", "monto", "descripcion", "estado"})
+
+	const pageSize = 100
+	offset := 0
+	for {
+		txs, _, err := h.transactions.History(r.Context(), userID, accountID, pageSize, offset)
+		if err != nil || len(txs) == 0 {
+			break
+		}
+		for _, t := range txs {
+			_ = cw.Write([]string{
+				t.Timestamp.Format("2006-01-02 15:04:05"),
+				t.Type,
+				t.FromAccount,
+				t.ToAccount,
+				money.FromCents(t.Amount),
+				t.Description,
+				t.Status,
+			})
+		}
+		if len(txs) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+	cw.Flush()
 }

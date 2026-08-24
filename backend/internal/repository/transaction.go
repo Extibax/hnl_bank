@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/juanbedoya/hnl-bank/backend/internal/model"
@@ -49,8 +50,8 @@ func (r *txRepo) History(ctx context.Context, userID, accountNumber string, limi
 		query += ` AND (from_account = $2 OR to_account = $2)`
 		args = append(args, accountNumber)
 	}
-	query += ` ORDER BY timestamp DESC LIMIT $3 OFFSET $4`
 	args = append(args, limit, offset)
+	query += fmt.Sprintf(` ORDER BY timestamp DESC LIMIT $%d OFFSET $%d`, len(args)-1, len(args))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
