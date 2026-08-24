@@ -6,7 +6,7 @@
 
 | Capa | Tecnologia |
 |------|-----------|
-| Backend | Go 1.26, Chi router, arquitectura en capas (handler -> service -> repository) |
+| Backend | Go (el instalado en este entorno: 1.26), Chi router, arquitectura en capas (handler -> service -> repository) |
 | Base de datos relacional | PostgreSQL 16 (users, user_accounts, transactions) |
 | Libro mayor financiero | TigerBeetle (cuentas y transferencias, saldos autoritativos) |
 | Auth | JWT (HS256) + bcrypt para passwords |
@@ -131,9 +131,18 @@ hnl_bank/
 
 ## Tests
 
+Los tests de servicio corren dentro de un contenedor `golang` (ya que Go no está instalado localmente en este equipo y `gcc` está bloqueado por AppLocker). Puedes hacerlo con:
+
 ```bash
-cd backend && go test ./internal/service/...
+make test
 ```
+
+o manualmente:
+
+```bash
+docker run --rm -v "$PWD/backend:/src" -v "$HOME/go/pkg/mod:/go/pkg/mod" -w /src golang:1.26 sh -c "go build ./... && go vet ./... && go test ./internal/service/..."
+```
+
 ## Notas de entorno (Docker Desktop en WSL2)
 
 - **TigerBeetle**: requiere io_uring, que el perfil seccomp por defecto de Docker bloquea; por eso el servicio usa security_opt seccomp=unconfined. Ademas, en Docker Desktop sobre WSL2 los volumenes montados no soportan el backend de almacenamiento de TigerBeetle (O_DIRECT), por lo que el directorio de datos queda dentro del contenedor (efimero). El arranque formatea el cluster con format y luego ejecuta start. Por ello, para una demo reproducible se recomienda `docker compose down -v && docker compose up --build`.

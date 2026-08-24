@@ -105,7 +105,7 @@ func (h *TransactionHandler) History(w http.ResponseWriter, r *http.Request) {
 	if offset < 0 {
 		offset = 0
 	}
-	txs, _, err := h.transactions.History(r.Context(), userID, accountID, limit, offset)
+	txs, total, err := h.transactions.History(r.Context(), userID, accountID, limit, offset)
 	if err != nil {
 		writeServiceError(w, err)
 		return
@@ -113,5 +113,5 @@ func (h *TransactionHandler) History(w http.ResponseWriter, r *http.Request) {
 	for i := range txs {
 		txs[i].AmountStr = money.FromCents(txs[i].Amount)
 	}
-	response.JSON(w, http.StatusOK, map[string]any{"transactions": txs})
+	response.JSON(w, http.StatusOK, map[string]any{"transactions": txs, "total": total})
 }

@@ -93,7 +93,7 @@ func (s *chatService) Chat(ctx context.Context, userID string, req *ChatRequest)
 		for _, tc := range toolCalls {
 			if criticalTools[tc.Name] {
 				return &ChatResult{
-					Message:              "¿Confirmar la operación?",
+					Message:              confirmationMessage(tc.Name, tc.Args),
 					RequiresConfirmation: true,
 					PendingAction:        map[string]any{"tool": tc.Name, "args": tc.Args},
 				}, nil
@@ -224,6 +224,25 @@ func (s *chatService) buildMessages(message string, history []ChatMessage) []map
 	}
 	out = append(out, map[string]any{"role": "user", "content": message})
 	return out
+}
+
+// confirmationMessage builds a descriptive confirmation message for a critical action.
+func confirmationMessage(tool string, args map[string]any) string {
+	amount, _ := args["amount"].(string)
+	switch tool {
+	case "make_deposit":
+		acct, _ := args["account_id"].(string)
+		return fmt.Sprintf("Voy a depositar %s en la cuenta %s. ¿Confirmas?", amount, acct)
+	case "make_withdrawal":
+		acct, _ := args["account_id"].(string)
+		return fmt.Sprintf("Voy a retirar %s de la cuenta %s. ¿Confirmas?", amount, acct)
+	case "make_transfer":
+		from, _ := args["from_account"].(string)
+		to, _ := args["to_account"].(string)
+		return fmt.Sprintf("Voy a transferir %s de la cuenta %s a la cuenta %s. ¿Confirmas?", amount, from, to)
+	default:
+		return "¿Confirmar la operación?"
+	}
 }
 
 func (s *chatService) execute(ctx context.Context, userID, name string, args map[string]any) string {
