@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    networks:
+      - app
+    environment:
+      POSTGRES_USER: hnlbank
+      POSTGRES_PASSWORD: hnlbank
+      POSTGRES_DB: hnlbank
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hnlbank"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  tigerbeetle:
+    image: ghcr.io/tigerbeetle/tigerbeetle:0.17.9
+    # TigerBeetle needs io_uring (blocked by Docker default seccomp) and its data
+    # files need a supported storage backend. In Docker Desktop on WSL2 a mounted
+    # volume does not support them, so the data dir lives inside the container
+    # (ephemeral). We format on first boot then start. A static IP is used because
+    # the client only accepts IP:port addresses (not hostnames).
+    entrypoint: ["sh", "-c"]
+    command: ["/tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data 2>/dev/null || true; exec /tigerbeetle start --addresses=0.0.0.0:3000 /data"]
+    security_opt:
+      - seccomp=unconfined
+    networks:
+      app:
+        ipv4_address: 172.28.0.10
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 3000"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  backend:
+    build: ./backend
+    networks:
+      - app
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://hnlbank:hnlbank@postgres:5432/hnlbank?sslmode=disable
+      TIGERBEETLE_ADDRESS: "172.28.0.10:3000"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-deepseek/deepseek-chat-v3-0324}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tigerbeetle:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  frontend:
+    build: ./frontend
+    networks:
+      - app
+    depends_on:
+      - backend
+    ports:
+      - "5180:80"
+
+networks:
+  app:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  pgdata:
