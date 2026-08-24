@@ -1,5 +1,7 @@
 # HNL Bank — Sistema de Banca en Linea (MVP)
 
+**Repositorio:** https://github.com/Extibax/hnl_bank (publico)
+
 **HNL Bank** es un MVP de banca en linea construido con un backend de doble base de datos: PostgreSQL para identidad y metadatos, y TigerBeetle como libro mayor (ledger) inmutable para saldos y transferencias. Incluye autenticacion JWT, cuentas, depositos, retiros, transferencias, historial y un asistente conversacional con IA (OpenRouter) capaz de ejecutar operaciones bancarias mediante tool-use.
 
 ## Stack tecnologico
